@@ -2,13 +2,16 @@ package cnrobot;
 
 
 import java.awt.Color;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Locale;
+import java.util.Random;
 
 import robocode.AdvancedRobot;
 import robocode.Bullet;
@@ -19,20 +22,22 @@ import robocode.DeathEvent;
 import robocode.HitByBulletEvent;
 import robocode.HitRobotEvent;
 import robocode.HitWallEvent;
+import robocode.RobocodeFileOutputStream;
+import robocode.RobocodeFileWriter;
 import robocode.ScannedRobotEvent;
-import robocode.TurnCompleteCondition;
 import robocode.WinEvent;
-import robocode.util.Utils;
 
 public class ChuckNoris extends AdvancedRobot {
-	HashMap<Bullet, String> dados = new HashMap<Bullet, String>();
-	StringBuffer buffer = new StringBuffer();
+	HashMap<Bullet, Dados> dadosBala = new HashMap<Bullet, Dados>();
 	double largura;
 	double altura;
 	int direcaoDeMovimento = 1;// -1 direção contrária
+	boolean aprendendo = true;
+	public static int contadorBalas;
 	
 	@Override
 	public void run() {
+
 		largura = getBattleFieldWidth();
 		altura = getBattleFieldHeight();
 		
@@ -40,11 +45,11 @@ public class ChuckNoris extends AdvancedRobot {
 		setAdjustGunForRobotTurn(true); 
 		
 		//Design do Robô
-		setBodyColor(new Color(128, 128, 50));
-		setGunColor(new Color(50, 50, 20));
-		setRadarColor(new Color(200, 200, 70));
-		setScanColor(Color.white);
-		setBulletColor(Color.blue);
+		setBodyColor(Color.WHITE);
+		setGunColor(Color.WHITE);
+		setRadarColor(Color.WHITE);
+		setScanColor(Color.WHITE);
+		setBulletColor(Color.YELLOW);
 		
 		while(true){
 			turnRadarRightRadians(Double.POSITIVE_INFINITY);
@@ -53,9 +58,16 @@ public class ChuckNoris extends AdvancedRobot {
 	
 	@Override
 	public void onScannedRobot(ScannedRobotEvent e) {
-		double absBearing = e.getBearingRadians() + getHeadingRadians();//enemies absolute bearing
-		double velocidadeLateral = e.getVelocity() * Math.sin(e.getHeadingRadians() - absBearing);//enemies later velocity
-		double gunTurnAmt;//amount to turn our gun
+		//rolamento absoluto do inimigo
+		double anguloAbsolutoInimigo = e.getBearingRadians() + getHeadingRadians();
+		anguloAbsolutoInimigo = Double.valueOf(String.format(Locale.US, "%.2f", anguloAbsolutoInimigo));
+		
+		//velocidade lateral do inimigo
+		double velocidadeLateral = e.getVelocity() * Math.sin(e.getHeadingRadians() - anguloAbsolutoInimigo);
+		velocidadeLateral = Double.valueOf(String.format(Locale.US, "%.2f", velocidadeLateral));
+		
+		double anguloArmaPreditor;
+		double anguloArmaAtual;
 		double distInimigo = e.getDistance();
 		double dist_discretizada = 0.0;
 		
@@ -64,40 +76,88 @@ public class ChuckNoris extends AdvancedRobot {
 		else
 			dist_discretizada = distInimigo + (50 - (distInimigo%50));
 	
-		setTurnRadarLeftRadians(getRadarTurnRemainingRadians());//lock on the radar
+		//trava o radar no focando o inimigo
+		setTurnRadarLeftRadians(getRadarTurnRemainingRadians());
 		
+		//Alterna randomicamente a velocidade do robô
 		if(Math.random()>.9){
-			setMaxVelocity((12*Math.random())+12);//randomly change speed
+			setMaxVelocity((12*Math.random())+12);
 		}
 		
-		Bullet bala;
-		double potencia;
+		
+		double potenciaBala;
+		Random rnd = new Random();
 		
 		//A movimentação do é realizada de acordo com a localização do alvo, 
 		//tentando ficar o mais próximo possível dele.
-		
-		//se a distância for maior que 150
 		if (e.getDistance() > 150) {
-			gunTurnAmt = robocode.util.Utils.normalRelativeAngle(absBearing- getGunHeadingRadians()+velocidadeLateral /22);//amount to turn our gun, lead just a little bit
-			setTurnGunRightRadians(gunTurnAmt); //turn our gun
-			setTurnRightRadians(robocode.util.Utils.normalRelativeAngle(absBearing-getHeadingRadians()+velocidadeLateral /getVelocity()));//drive towards the enemies predicted future location
-			setAhead((e.getDistance() - 140)*direcaoDeMovimento);//move forward
+			anguloArmaAtual = getGunHeadingRadians();
+			anguloArmaAtual = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaAtual));
 			
-			potencia = 3 - (Math.random()*3);
-			bala = fireBullet(potencia);
-			dados.put(bala, dist_discretizada +","+velocidadeLateral+","+potencia);
+			anguloArmaPreditor = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + velocidadeLateral /22);
+			anguloArmaPreditor = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaPreditor));
 			
+			//gira arma para a posição prevista do inimigo
+			setTurnGunRightRadians(anguloArmaPreditor);
+			setTurnRightRadians(robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo-getHeadingRadians()+velocidadeLateral /getVelocity()));//drive towards the enemies predicted future location
 			
-		}
-		else{//if we are close enough...
-			gunTurnAmt = robocode.util.Utils.normalRelativeAngle(absBearing- getGunHeadingRadians()+velocidadeLateral /15);//amount to turn our gun, lead just a little bit
-			setTurnGunRightRadians(gunTurnAmt);//turn our gun
-			setTurnLeft(-90-e.getBearing()); //turn perpendicular to the enemy
-			setAhead((e.getDistance() - 140)*direcaoDeMovimento);//move forward
+			//move-se em direção ao inimigo
+			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
 			
-			potencia = 3 - (Math.random()*3);
-			bala = fireBullet(potencia);
-			dados.put(bala, dist_discretizada +","+velocidadeLateral+","+potencia);
+			//potenciaBala = 2*(1 + rnd.nextInt(15))/10.0;
+			if (getEnergy() < 10)
+				potenciaBala = 0.5;
+			else
+				potenciaBala = 3;
+			
+			Bullet bala = fireBullet(potenciaBala);
+			
+			//Dados referente ao tiro
+			Dados dados = new Dados();
+			dados.setDistanciaInimigo(dist_discretizada);
+			dados.setVelocidadeLateral(velocidadeLateral);
+			dados.setPotenciaBala(potenciaBala);
+			dados.setAnguloArmaAtual(anguloArmaAtual);
+			dados.setAnguloAbsolutoInimigo(anguloAbsolutoInimigo);
+			dados.setAnguloArmaPreditor(anguloArmaPreditor);
+			dados.setAcertou(false);
+			
+			dadosBala.put(bala, dados);
+			
+		} 
+		else{ //Se estiver próximo do inimigo, tenta ficar perpendicular a ele
+			anguloArmaAtual = getGunHeadingRadians();
+			anguloArmaAtual = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaAtual));
+			
+			anguloArmaPreditor = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + velocidadeLateral /15);
+			anguloArmaPreditor = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaPreditor));
+			
+			//gira arma para a posição prevista do inimigo
+			setTurnGunRightRadians(anguloArmaPreditor);
+			
+			//mantém-se perpendicular ao inimigo
+			setTurnLeft(-90-e.getBearing());
+			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
+			
+			//potencia = 2*(1 + rnd.nextInt(15))/10.0;
+			if (getEnergy() < 10)
+				potenciaBala = 0.5;
+			else
+				potenciaBala = 3;
+			
+			Bullet bala = fireBullet(potenciaBala);
+			
+			//Dados referente ao tiro
+			Dados dados = new Dados();
+			dados.setDistanciaInimigo(dist_discretizada);
+			dados.setVelocidadeLateral(velocidadeLateral);
+			dados.setPotenciaBala(potenciaBala);
+			dados.setAnguloArmaAtual(anguloArmaAtual);
+			dados.setAnguloAbsolutoInimigo(anguloAbsolutoInimigo);
+			dados.setAnguloArmaPreditor(anguloArmaPreditor);
+			dados.setAcertou(false);
+			
+			dadosBala.put(bala, dados);
 		}	
 		
 	}
@@ -105,28 +165,31 @@ public class ChuckNoris extends AdvancedRobot {
 	@Override
 	public void onBulletHit(BulletHitEvent event) {
 		Bullet bala = event.getBullet();
-		
-		String linha = dados.get(bala) + ",SIM";
-		buffer.append(linha);
-		out.println(linha);
+		Dados dados = dadosBala.get(bala);
+		dados.setAcertou(true);
+		//String linha = dadosBala.get(bala) + ", SIM\n";
+		//buffer.append(linha);
+		out.println(++contadorBalas+dados.toString());
 	}
 
 	@Override
 	public void onBulletHitBullet(BulletHitBulletEvent event) {
 		Bullet bala = event.getBullet();
-		
-		String linha = dados.get(bala) + ",NAO";
-		buffer.append(linha);
-		out.println(linha);
+		Dados dados = dadosBala.get(bala);
+		dados.setAcertou(false);
+		//String linha = dadosBala.get(bala) + ", NAO\n";
+		//buffer.append(linha);
+		out.println(++contadorBalas+dados.toString());
 	}
 
 	@Override
 	public void onBulletMissed(BulletMissedEvent event) {
 		Bullet bala = event.getBullet();
-		
-		String linha = dados.get(bala) + ",NAO";
-		buffer.append(linha);
-		out.println(linha);
+		Dados dados = dadosBala.get(bala);
+		dados.setAcertou(false);
+		//String linha = dadosBala.get(bala) + ", NAO\n";
+		//buffer.append(linha);
+		out.println(++contadorBalas+dados.toString());
 	}
 
 	@Override
@@ -146,48 +209,55 @@ public class ChuckNoris extends AdvancedRobot {
 
 	@Override
 	public void onDeath(DeathEvent event) {
-		// TODO Auto-generated method stub
-		super.onDeath(event);
+		if (aprendendo){
+			saveFile();
+		}
 	}
 
 	@Override
 	public void onWin(WinEvent event) {
-		// TODO Auto-generated method stub
-		super.onWin(event);
+		if (aprendendo){
+			saveFile();
+		}
 	}
 	
+	//Salva o log
 	public void saveFile(){
-		/*try {
-			File resultados= new File("resultado.txt");
-			StringBuffer buffer = new StringBuffer();
+		try {
+			File resultados = getDataFile("logChuckNoris.txt");
 			
 			BufferedReader bufferReader = new BufferedReader(new FileReader(resultados));
 			
 			String linha;
+			StringBuffer buffer = new StringBuffer();
+			
 			while((linha = bufferReader.readLine())!= null)
 				buffer.append(linha + "\n");
 			
-			FileOutputStream escritor = new FileOutputStream(resultados);
-			DataOutputStream escritorTempoReal = new DataOutputStream(escritor);
+			RobocodeFileWriter fw = new RobocodeFileWriter(resultados);
+			fw.write(buffer.toString());
 			
-			String aSerEscrito = buffer.substring(0,buffer.length()-1);
-			String nova = "";
-			
-			for(int i=0; i<aSerEscrito.length();i++){
-				char c = aSerEscrito.charAt(i);
-				if(!ehSujeira(c))
-					nova += c;
+			for (Bullet key : dadosBala.keySet()){
+				Dados d = dadosBala.get(key);
+				linha = d.getDistanciaInimigo()+","+
+						d.getVelocidadeLateral()+","+
+						d.getPotenciaBala()+","+
+						d.getAnguloArmaAtual()+","+
+						d.getAnguloAbsolutoInimigo()+","+
+						d.getAnguloArmaPreditor()+","+
+						(d.isAcertou() ? "SIM" : "NAO")+"\n";
+				
+				fw.write(linha);
 			}
-			escritorTempoReal.writeChars(nova);
 			
+			fw.flush();
+			fw.close();
 			bufferReader.close();
-			escritor.close();
-			escritorTempoReal.close();
 			
 		} catch (IOException e2) {
 			// TODO Auto-generated catch block
 			e2.printStackTrace();
-		}*/
+		}
 	}
 	
 }
