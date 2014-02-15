@@ -2,10 +2,7 @@ package cnrobot;
 
 
 import java.awt.Color;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -22,7 +19,6 @@ import robocode.DeathEvent;
 import robocode.HitByBulletEvent;
 import robocode.HitRobotEvent;
 import robocode.HitWallEvent;
-import robocode.RobocodeFileOutputStream;
 import robocode.RobocodeFileWriter;
 import robocode.ScannedRobotEvent;
 import robocode.WinEvent;

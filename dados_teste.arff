@@ -1,0 +1,14 @@
+@relation robots
+
+@attribute distanciaInimigo numeric
+@attribute velocidadeLateral numeric
+@attribute potenciaBala {0.5,3.0}
+@attribute anguloArmaAtual numeric
+@attribute anguloAbsolutoInimigo numeric
+@attribute anguloArmaPreditor numeric
+@attribute acertou {SIM,NAO}
+
+@data
+100,-7.86,3.0,1.37,1.87,-0.02, ?
+250,1.74,3.0,1.36,1.32,0.04, ?
+100,-1.93,3.0,0.53,0.67,0.01, ?
