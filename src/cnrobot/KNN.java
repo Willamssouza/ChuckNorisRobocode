@@ -77,7 +77,7 @@ public class KNN {
 		return vizinhos;
 	}
 	
-	public double distanciaEuclidiana(Dados x, Dados y){
+	private double distanciaEuclidiana(Dados x, Dados y){
 		double resultado = Math.pow(x.getDistanciaInimigo() - y.getDistanciaInimigo(), 2);
 		resultado += Math.pow(x.getVelocidadeLateralInimigo() - y.getVelocidadeLateralInimigo(), 2);
 		resultado += Math.pow(x.getAnguloAbsolutoInimigo() - y.getAnguloAbsolutoInimigo(), 2);
