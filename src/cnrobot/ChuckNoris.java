@@ -27,9 +27,16 @@ public class ChuckNoris extends AdvancedRobot {
 	HashMap<Bullet, Dados> dadosBala = new HashMap<Bullet, Dados>();
 	double largura;
 	double altura;
+	
 	int direcaoDeMovimento = 1;// -1 direção contrária
 	boolean aprendendo = true;
-	public static int contadorBalas;
+	
+	static Dados[] dataSet;
+	static int posicaoDataSet = 0;
+	
+	final int TAMANHO_DATASET = 10000;
+	final int VELOCIDADE_MAXIMA = 8;
+	
 	
 	@Override
 	public void run() {
@@ -37,15 +44,17 @@ public class ChuckNoris extends AdvancedRobot {
 		largura = getBattleFieldWidth();
 		altura = getBattleFieldHeight();
 		
+		dataSet = new Dados[TAMANHO_DATASET];
+		
 		setAdjustRadarForRobotTurn(true);
 		setAdjustGunForRobotTurn(true); 
 		
 		//Design do Robô
-		setBodyColor(Color.WHITE);
-		setGunColor(Color.WHITE);
-		setRadarColor(Color.WHITE);
-		setScanColor(Color.WHITE);
-		setBulletColor(Color.YELLOW);
+		setBodyColor(Color.BLACK);
+		setGunColor(Color.BLACK);
+		setRadarColor(Color.BLACK);
+		setScanColor(Color.RED);
+		setBulletColor(Color.WHITE);
 		
 		while(true){
 			turnRadarRightRadians(Double.POSITIVE_INFINITY);
@@ -54,24 +63,20 @@ public class ChuckNoris extends AdvancedRobot {
 	
 	@Override
 	public void onScannedRobot(ScannedRobotEvent e) {
-		//rolamento absoluto do inimigo
+		//ângulo absoluto do inimigo
 		double anguloAbsolutoInimigo = e.getBearingRadians() + getHeadingRadians();
-		anguloAbsolutoInimigo = Double.valueOf(String.format(Locale.US, "%.2f", anguloAbsolutoInimigo));
 		
 		//velocidade lateral do inimigo
 		double velocidadeLateral = e.getVelocity() * Math.sin(e.getHeadingRadians() - anguloAbsolutoInimigo);
-		velocidadeLateral = Double.valueOf(String.format(Locale.US, "%.2f", velocidadeLateral));
+		//velocidadeLateral = Double.valueOf(String.format(Locale.US, "%.1f", velocidadeLateral));
 		
-		double anguloArmaPreditor;
+		//distância do inimigo
+		double distanciaInimigo = e.getDistance();
+		
+		double fatorAnguloTiro;
+		double anguloVirarArma;
 		double anguloArmaAtual;
-		double distInimigo = e.getDistance();
-		double dist_discretizada = 0.0;
 		
-		if(distInimigo%50<25)
-			dist_discretizada = distInimigo - distInimigo%50;
-		else
-			dist_discretizada = distInimigo + (50 - (distInimigo%50));
-	
 		//trava o radar no focando o inimigo
 		setTurnRadarLeftRadians(getRadarTurnRemainingRadians());
 		
@@ -83,78 +88,73 @@ public class ChuckNoris extends AdvancedRobot {
 		
 		double potenciaBala;
 		Random rnd = new Random();
+		Bullet bala;
 		
 		//A movimentação do é realizada de acordo com a localização do alvo, 
 		//tentando ficar o mais próximo possível dele.
 		if (e.getDistance() > 150) {
 			anguloArmaAtual = getGunHeadingRadians();
-			anguloArmaAtual = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaAtual));
 			
-			anguloArmaPreditor = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + velocidadeLateral /22);
-			anguloArmaPreditor = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaPreditor));
+			fatorAnguloTiro = velocidadeLateral/22;
+			fatorAnguloTiro = Double.valueOf(String.format(Locale.US, "%.1f", fatorAnguloTiro));
+			
+			//calcula o ângulo relativo para virar a arma
+			anguloVirarArma = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + fatorAnguloTiro);
 			
 			//gira arma para a posição prevista do inimigo
-			setTurnGunRightRadians(anguloArmaPreditor);
+			setTurnGunRightRadians(anguloVirarArma);
 			setTurnRightRadians(robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo-getHeadingRadians()+velocidadeLateral /getVelocity()));//drive towards the enemies predicted future location
 			
 			//move-se em direção ao inimigo
 			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
 			
-			//potenciaBala = 2*(1 + rnd.nextInt(15))/10.0;
+			//potenciaBala = (2*(1 + rnd.nextInt(10))/10.0)+1;
 			if (getEnergy() < 10)
-				potenciaBala = 0.5;
+				potenciaBala = 1.0;
 			else
-				potenciaBala = 3;
+				potenciaBala = 2;
 			
-			Bullet bala = fireBullet(potenciaBala);
-			
-			//Dados referente ao tiro
-			Dados dados = new Dados();
-			dados.setDistanciaInimigo(dist_discretizada);
-			dados.setVelocidadeLateral(velocidadeLateral);
-			dados.setPotenciaBala(potenciaBala);
-			dados.setAnguloArmaAtual(anguloArmaAtual);
-			dados.setAnguloAbsolutoInimigo(anguloAbsolutoInimigo);
-			dados.setAnguloArmaPreditor(anguloArmaPreditor);
-			dados.setAcertou(false);
-			
-			dadosBala.put(bala, dados);
+
+			bala = fireBullet(potenciaBala);
 			
 		} 
 		else{ //Se estiver próximo do inimigo, tenta ficar perpendicular a ele
 			anguloArmaAtual = getGunHeadingRadians();
-			anguloArmaAtual = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaAtual));
 			
-			anguloArmaPreditor = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + velocidadeLateral /15);
-			anguloArmaPreditor = Double.valueOf(String.format(Locale.US, "%.2f", anguloArmaPreditor));
+			fatorAnguloTiro = velocidadeLateral/15;
+			fatorAnguloTiro = Double.valueOf(String.format(Locale.US, "%.1f", fatorAnguloTiro));
 			
-			//gira arma para a posição prevista do inimigo
-			setTurnGunRightRadians(anguloArmaPreditor);
+			//calcula o ângulo relativo para virar a arma
+			anguloVirarArma = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + fatorAnguloTiro);
+			setTurnGunRightRadians(anguloVirarArma);
 			
 			//mantém-se perpendicular ao inimigo
 			setTurnLeft(-90-e.getBearing());
 			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
 			
-			//potencia = 2*(1 + rnd.nextInt(15))/10.0;
+			//potenciaBala = (2*(1 + rnd.nextInt(10))/10.0)+1;
 			if (getEnergy() < 10)
-				potenciaBala = 0.5;
+				potenciaBala = 1.0;
 			else
 				potenciaBala = 3;
 			
-			Bullet bala = fireBullet(potenciaBala);
-			
-			//Dados referente ao tiro
-			Dados dados = new Dados();
-			dados.setDistanciaInimigo(dist_discretizada);
-			dados.setVelocidadeLateral(velocidadeLateral);
-			dados.setPotenciaBala(potenciaBala);
-			dados.setAnguloArmaAtual(anguloArmaAtual);
-			dados.setAnguloAbsolutoInimigo(anguloAbsolutoInimigo);
-			dados.setAnguloArmaPreditor(anguloArmaPreditor);
-			dados.setAcertou(false);
-			
-			dadosBala.put(bala, dados);
-		}	
+
+			bala = fireBullet(potenciaBala);		
+		}
+		
+		/****Normalizando os dados****/
+		double distanciaInimigoN = distanciaInimigo / Math.sqrt((Math.pow(largura, 2)+Math.pow(altura, 2)));
+		double velocidadeLateralN = velocidadeLateral / VELOCIDADE_MAXIMA;
+		double anguloAbsolutoInimigoN = anguloAbsolutoInimigo / (2 * Math.PI);
+		double fatorAnguloTiroN = fatorAnguloTiro/(2 * Math.PI);
+		
+		Dados dados = new Dados();
+		dados.setDistanciaInimigo(distanciaInimigoN);
+		dados.setVelocidadeLateral(velocidadeLateralN);
+		dados.setAnguloAbsolutoInimigo(anguloAbsolutoInimigoN);
+		dados.setFatorAnguloTiro(fatorAnguloTiroN);
+		
+		dadosBala.put(bala, dados);	
 		
 	}
 
@@ -163,9 +163,15 @@ public class ChuckNoris extends AdvancedRobot {
 		Bullet bala = event.getBullet();
 		Dados dados = dadosBala.get(bala);
 		dados.setAcertou(true);
-		//String linha = dadosBala.get(bala) + ", SIM\n";
-		//buffer.append(linha);
-		out.println(++contadorBalas+dados.toString());
+		
+		//quando encher o buffer retorna para o inicio
+		if (posicaoDataSet == TAMANHO_DATASET){
+			posicaoDataSet = 0;
+		}
+		dataSet[posicaoDataSet] = dados;
+		posicaoDataSet++;
+		
+		out.println(posicaoDataSet+dados.toString());
 	}
 
 	@Override
@@ -173,9 +179,9 @@ public class ChuckNoris extends AdvancedRobot {
 		Bullet bala = event.getBullet();
 		Dados dados = dadosBala.get(bala);
 		dados.setAcertou(false);
-		//String linha = dadosBala.get(bala) + ", NAO\n";
-		//buffer.append(linha);
-		out.println(++contadorBalas+dados.toString());
+		dadosBala.remove(bala);
+		
+		//out.println(++contadorBalas+dados.toString());
 	}
 
 	@Override
@@ -183,14 +189,14 @@ public class ChuckNoris extends AdvancedRobot {
 		Bullet bala = event.getBullet();
 		Dados dados = dadosBala.get(bala);
 		dados.setAcertou(false);
-		//String linha = dadosBala.get(bala) + ", NAO\n";
-		//buffer.append(linha);
-		out.println(++contadorBalas+dados.toString());
+		//out.println(posicaoDataSet+dados.toString());
 	}
 
 	@Override
 	public void onHitByBullet(HitByBulletEvent event) {
-		//direcaoDeMovimento = -direcaoDeMovimento;
+		/*if (++contadorBalasRecebidas >= 3){
+			direcaoDeMovimento = -direcaoDeMovimento;
+		}*/
 	}
 
 	@Override
@@ -236,12 +242,9 @@ public class ChuckNoris extends AdvancedRobot {
 			for (Bullet key : dadosBala.keySet()){
 				Dados d = dadosBala.get(key);
 				linha = d.getDistanciaInimigo()+","+
-						d.getVelocidadeLateral()+","+
-						d.getPotenciaBala()+","+
-						d.getAnguloArmaAtual()+","+
+						d.getVelocidadeLateralInimigo()+","+
 						d.getAnguloAbsolutoInimigo()+","+
-						d.getAnguloArmaPreditor()+","+
-						(d.isAcertou() ? "SIM" : "NAO")+"\n";
+						d.getFatorAnguloTiro();
 				
 				fw.write(linha);
 			}
