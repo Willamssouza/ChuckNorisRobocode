@@ -23,7 +23,7 @@ import robocode.RobocodeFileWriter;
 import robocode.ScannedRobotEvent;
 import robocode.WinEvent;
 
-public class ChuckNoris extends AdvancedRobot {
+public class ChuckNorris extends AdvancedRobot {
 	final static int TAMANHO_DATASET = 2000;
 	final int VELOCIDADE_MAXIMA = 8;
 	
