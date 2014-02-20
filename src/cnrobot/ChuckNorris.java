@@ -22,7 +22,13 @@ import robocode.HitWallEvent;
 import robocode.RobocodeFileWriter;
 import robocode.ScannedRobotEvent;
 import robocode.WinEvent;
-
+/**
+ * Universidade Federal de Sergipe
+ * 
+ * @author Willams de Souza Santos (willamssouza@hotmail.com)
+ * 
+ *
+ */
 public class ChuckNorris extends AdvancedRobot {
 	final static int TAMANHO_DATASET = 2000;
 	final int VELOCIDADE_MAXIMA = 8;
