@@ -1,33 +1,6 @@
 package cnrobot;
 
 public class KNN {
-		/* Algoritmo k-NN
-		nearestNeighbors(allPoints, currentPoint, numNeighbors, numDimensions)
-	    define nearestPoints, collection of size <numNeighbors>
-	    fill nearestPoints with the first <numNeighbors> points from allPoints
-	
-	    define nearestDistancesSq, double array of size <numNeighbors>
-	    set nearestDistancesSq[0] to distanceSquared(currentPoint, nearestPoints[0])
-	    define longestDistanceSq, initialize to nearestDistanceSq[0]
-	    define longestIndex, initialize to 0
-	
-	    for x = 1 to numNeighbors-1
-	        nearestDistancesSq[x] = distanceSquared(currentPoint, nearestPoints[x]);
-	        if (nearestDistancesSq[x] > longestDistanceSq)
-	            longestDistanceSq = nearestDistancesSq[x]
-	            longestIndex = x
-	
-	    for x = numNeighbors to allPoints.length-1
-	        thisDistanceSq = distanceSquared(currentPoint, allPoints[x]);
-	        if (thisDistanceSq < longestDistanceSq)
-	            nearestPoints[longestIndex] = allPoints[x]
-	            nearestDistanceSq[longestIndex] = thisDistanceSq
-	            find the new maximum value in nearestDistancesSq
-	                set longestDistanceSq to the maximum value
-	                set longestIndex to the array index of the maximum value
-	
-	    return nearestPoints
-		end*/
 	
 	public Dados[] kVizinhos(Dados[] dataSet, Dados atual, int numVizinhos){
 		Dados[] vizinhos = new Dados[numVizinhos];

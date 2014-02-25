@@ -2,15 +2,16 @@ package cnrobot;
 
 
 import java.awt.Color;
-import java.io.BufferedReader;
+import java.awt.Graphics2D;
+import java.awt.geom.Rectangle2D;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 
 import robocode.AdvancedRobot;
+import robocode.BattleEndedEvent;
 import robocode.Bullet;
 import robocode.BulletHitBulletEvent;
 import robocode.BulletHitEvent;
@@ -30,7 +31,7 @@ import robocode.WinEvent;
  *
  */
 public class ChuckNorris extends AdvancedRobot {
-	final static int TAMANHO_DATASET = 2000;
+	final static int TAMANHO_DATASET = 5000;
 	final int VELOCIDADE_MAXIMA = 8;
 	
 	HashMap<Bullet, Dados> dadosBala = new HashMap<Bullet, Dados>();
@@ -39,9 +40,10 @@ public class ChuckNorris extends AdvancedRobot {
 	double altura;
 	
 	int direcaoDeMovimento = 1;// -1 direção contrária
-	boolean aprendendo = false;
+	boolean salvarLog = false;
 	
-
+	static int totalDisparos = 0;
+	static int totalErros = 0;
 	
 	@Override
 	public void run() {
@@ -66,6 +68,9 @@ public class ChuckNorris extends AdvancedRobot {
 	
 	@Override
 	public void onScannedRobot(ScannedRobotEvent e) {
+		//Move - se Acordo com a localização do oponente
+		movimentacao(e);
+		
 		//ângulo absoluto do inimigo
 		double anguloAbsolutoInimigo = e.getBearingRadians() + getHeadingRadians();
 		
@@ -84,44 +89,23 @@ public class ChuckNorris extends AdvancedRobot {
 		//trava o radar no focando o inimigo
 		setTurnRadarLeftRadians(getRadarTurnRemainingRadians());
 		
-		//Alterna randomicamente a velocidade do robô
-		if(Math.random()>.9){
-			setMaxVelocity((12*Math.random())+12);
+		//Definindo potência da bala baseado na distância do inimigo
+		if (e.getDistance() > 500) {
+			potenciaBala = 1.0;
+		} 
+		else if (e.getDistance() > 150){	
+			potenciaBala = 2.0;		
+		} else {
+			potenciaBala = 3.0;
 		}
 		
-		//A movimentação do é realizada de acordo com a localização do alvo, 
-		//tentando ficar o mais próximo possível dele.
-		if (e.getDistance() > 150) {
-			setBulletColor(Color.WHITE);
-			fatorAnguloTiro = velocidadeLateral/22;
-			
-			//move-se em direção ao inimigo
-			setTurnRightRadians(robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo-getHeadingRadians()+velocidadeLateral /getVelocity()));//drive towards the enemies predicted future location
-			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
-			
-			if (getEnergy() < 10)
-				potenciaBala = 1.0;
-			else
-				potenciaBala = 2;	
-			
-		} 
-		else{ //Se estiver próximo do inimigo, tenta ficar perpendicular a ele
-			setBulletColor(Color.WHITE);	
-			fatorAnguloTiro = velocidadeLateral/15;
-						
-			//mantém-se perpendicular ao inimigo
-			setTurnLeft(-90-e.getBearing());
-			setAhead((e.getDistance() - 140)*direcaoDeMovimento);
-			
-			if (getEnergy() < 10)
-				potenciaBala = 1.0;
-			else
-				potenciaBala = 3;					
-		}
+		//Diminiu o gasto de energia quando o inimigo estar com pouca energia
+		if (getEnergy() < 10 || e.getEnergy() < 10)
+			potenciaBala = 1.0;
 		
 		/****Normalizando os dados****/
 		double distanciaInimigoN = distanciaInimigo / Math.sqrt((Math.pow(largura, 2)+Math.pow(altura, 2)));
-		double velocidadeLateralN = velocidadeLateral / VELOCIDADE_MAXIMA;
+		double velocidadeLateralN = Math.abs(velocidadeLateral / VELOCIDADE_MAXIMA);
 		double anguloAbsolutoInimigoN = anguloAbsolutoInimigo / (2 * Math.PI);
 		
 		Dados dadosAtual = new Dados();
@@ -132,21 +116,34 @@ public class ChuckNorris extends AdvancedRobot {
 		
 		KNN knn = new KNN();
 		
-		if (dataSet.size() > 100){
+		double porcentagemDeRoundParaTreino = (double)this.getBattleNum()/this.getNumBattles();
+		
+		//Utiliza 30 % do número total de rounds da batalha para treino.
+		//Gerando ângulo de tiros aleatórios
+		if (porcentagemDeRoundParaTreino > 0.3){
 			Dados[] dataSetArray = new Dados[dataSet.size()];
 			dataSetArray = dataSet.toArray(dataSetArray);
-			Dados[] vizinhos = knn.kVizinhos(dataSetArray, dadosAtual, 1);
+			
+			int k = 3;
+			Dados[] vizinhos = knn.kVizinhos(dataSetArray, dadosAtual, k);
 			fatorAnguloTiro = 0.0;
-			fatorAnguloTiro = vizinhos[0].getFatorAnguloTiro() * (2*Math.PI);
-			/*for (int i = 0; i < 3; i++){
+			
+			for (int i = 0; i < k; i++)
 				fatorAnguloTiro += vizinhos[i].getFatorAnguloTiro() * (2*Math.PI);
-			}
-			fatorAnguloTiro /= 3;*/
+			
+			fatorAnguloTiro /= k;
+			
+
 		} else {
-			/*if (velocidadeLateral == 0)
+			if (velocidadeLateral == 0)
 				fatorAnguloTiro = 0;
 			else
-				fatorAnguloTiro = velocidadeLateral > 0 ? Math.random() * 0.5 : -Math.random() * 0.5;*/
+				fatorAnguloTiro = Math.random() * 0.5;
+		}
+		
+		//Ajustando o fator ângulo para direção que o oponente se move
+		if (velocidadeLateral < 0){
+			fatorAnguloTiro = -fatorAnguloTiro; 
 		}
 		
 		//calcula o ângulo relativo para virar a arma
@@ -154,12 +151,18 @@ public class ChuckNorris extends AdvancedRobot {
 		anguloVirarArma = robocode.util.Utils.normalRelativeAngle(anguloAbsolutoInimigo - anguloArmaAtual + fatorAnguloTiro);
 		setTurnGunRightRadians(anguloVirarArma);
 		
-		double fatorAnguloTiroN = fatorAnguloTiro/(2 * Math.PI);
+		//Normalizando angulo de tiro
+		double fatorAnguloTiroN = Math.abs(fatorAnguloTiro/(2 * Math.PI));
 		dadosAtual.setFatorAnguloTiro(fatorAnguloTiroN);
 		
-		bala = fireBullet(potenciaBala);
-		
-		dadosBala.put(bala, dadosAtual);	
+		//para de atirar se tiver com pouca energia 
+		if (getEnergy() > 2.0){
+			bala = fireBullet(potenciaBala);
+			dadosBala.put(bala, dadosAtual);
+		} else if (e.getEnergy() == 0.0){
+			bala = fireBullet(0.1);
+			dadosBala.put(bala, dadosAtual);
+		}
 	}
 
 	@Override
@@ -174,7 +177,7 @@ public class ChuckNorris extends AdvancedRobot {
 			dataSet.remove(rnd.nextInt(TAMANHO_DATASET));
 		}
 		dataSet.add(dados);
-		
+		totalDisparos++;
 		out.println(dataSet.size()+dados.toString());
 	}
 
@@ -184,6 +187,8 @@ public class ChuckNorris extends AdvancedRobot {
 		Dados dados = dadosBala.get(bala);
 		dados.setAcertou(false);
 		dadosBala.remove(bala);
+		totalErros++;
+		totalDisparos++;
 	}
 
 	@Override
@@ -191,7 +196,8 @@ public class ChuckNorris extends AdvancedRobot {
 		Bullet bala = event.getBullet();
 		Dados dados = dadosBala.get(bala);
 		dados.setAcertou(false);
-
+		totalErros++;
+		totalDisparos++;
 	}
 
 	@Override
@@ -211,36 +217,65 @@ public class ChuckNorris extends AdvancedRobot {
 
 	@Override
 	public void onDeath(DeathEvent event) {
-		if (aprendendo){
+		if (salvarLog){
 			saveFile();
 		}
 	}
 
 	@Override
 	public void onWin(WinEvent event) {
-		if (aprendendo){
+		if (salvarLog){
 			saveFile();
 		}
 	}
 	
-	//Salva o log
+	@Override
+	public void onBattleEnded(BattleEndedEvent event) {
+		double taxaDeAcerto = 0;
+		if (totalDisparos > 0){
+			taxaDeAcerto = (double) (totalDisparos-totalErros)/totalDisparos;
+		}
+		out.println(taxaDeAcerto);
+	}
+	
+	/** Movimentação Randômica com Wall Avoidance **/
+	public void movimentacao(ScannedRobotEvent e){
+		//Alterna randomicamente a velocidade e direção de movimento do robô
+		if(Math.random()> 0.9){
+			setMaxVelocity((12*Math.random())+12);
+			direcaoDeMovimento = -direcaoDeMovimento;
+		}
+		
+		double direcaoObjetivo = e.getBearingRadians() + getHeadingRadians()- (Math.PI/2*direcaoDeMovimento);
+		
+		//Cria uma área segura evitando colisão com a parede
+		Rectangle2D areaSegura = new Rectangle2D.Double(18, 18, getBattleFieldWidth()-36,getBattleFieldHeight()-36);
+		while (!areaSegura.contains(getX()+Math.sin(direcaoObjetivo)*120, getY()+Math.cos(direcaoObjetivo)*120))
+		{
+			direcaoObjetivo += direcaoDeMovimento*0.1;	
+		}
+		double anguloGirar = robocode.util.Utils.normalRelativeAngle(direcaoObjetivo-getHeadingRadians());
+		if (Math.abs(anguloGirar) > Math.PI/2)
+		{
+			anguloGirar = robocode.util.Utils.normalRelativeAngle(anguloGirar + Math.PI);
+			setBack(100);
+		}
+		else
+			setAhead(100);
+		setTurnRightRadians(anguloGirar);
+	}
+
+	/** Salva log */
 	public void saveFile(){
 		try {
-			File resultados = getDataFile("logChuckNoris.txt");
-			
-			BufferedReader bufferReader = new BufferedReader(new FileReader(resultados));
-			
+			File resultados = getDataFile("logChuckNoris.txt");	
 			String linha;
 			StringBuffer buffer = new StringBuffer();
-			
-			while((linha = bufferReader.readLine())!= null)
-				buffer.append(linha + "\n");
 			
 			RobocodeFileWriter fw = new RobocodeFileWriter(resultados);
 			fw.write(buffer.toString());
 			
-			for (Bullet key : dadosBala.keySet()){
-				Dados d = dadosBala.get(key);
+			for (Dados d : dataSet){
 				linha = d.getDistanciaInimigo()+","+
 						d.getVelocidadeLateralInimigo()+","+
 						d.getAnguloAbsolutoInimigo()+","+
@@ -251,7 +286,6 @@ public class ChuckNorris extends AdvancedRobot {
 			
 			fw.flush();
 			fw.close();
-			bufferReader.close();
 			
 		} catch (IOException e2) {
 			// TODO Auto-generated catch block
